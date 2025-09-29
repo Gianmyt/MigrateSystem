@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Migration.API.Migration;
 using Migration.API.Services;
 using Migration.Infrastructure.models;
 using Migration.Infrastructure.services;
@@ -39,12 +40,14 @@ builder.Services.AddAuthentication(options =>
 });
 builder.Services.AddAuthorization();
 
-builder.Services.AddControllers();
+
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 builder.Services.AddSingleton<RabbitMqService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddScoped<IMigrationService,MigrationService>();
+builder.Services.AddControllers();
 builder.Services.AddSingleton<IConnection>(sp =>
 {
 

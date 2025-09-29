@@ -17,15 +17,15 @@ namespace Migration.Worker.services
     {
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly string _queueName = "migration_queue";
-        private  IConnection? _connection;
-        private  IChannel? _channel;
+        private IConnection? _connection;
+        private IChannel? _channel;
 
         public MigrationWorkerService(IServiceScopeFactory scopeFactory, IConnection? connection)
         {
             _scopeFactory = scopeFactory;
             _connection = connection;
             InitRabbitMQ();
-            
+
         }
 
         private void InitRabbitMQ()
@@ -39,7 +39,7 @@ namespace Migration.Worker.services
 
         protected override async Task<Task> ExecuteAsync(CancellationToken stoppingToken)
         {
-            
+
 
             var consumer = new AsyncEventingBasicConsumer(_channel);
             consumer.ReceivedAsync += async (model, ea) =>
@@ -51,8 +51,14 @@ namespace Migration.Worker.services
                 var db = scope.ServiceProvider.GetRequiredService<MigrationDbContext>();
                 var auditLog = scope.ServiceProvider.GetRequiredService<IAuditLogService>();
 
-                // Verifica slot
-                var slot = await db.MigrationSlots.FirstOrDefaultAsync(s => !s.IsOccupied);
+                // Usare una transazione per evitare race condition sugli slot
+                using var transaction = await db.Database.BeginTransactionAsync();
+
+                // Cerca uno slot libero con lock (UPDLOCK + READPAST evita deadlock)
+                var slot = await db.MigrationSlots
+                    .FromSqlRaw("SELECT TOP(1) * FROM MigrationSlots WITH (UPDLOCK, READPAST) WHERE IsOccupied = 0")
+                    .FirstOrDefaultAsync();
+
                 if (slot == null)
                 {
                     await auditLog.LogAsync("SlotUnavailable", "WorkerService", $"UserId={userId}", "Failed");
@@ -60,19 +66,34 @@ namespace Migration.Worker.services
                     return;
                 }
 
-                // Occupa slot
+                // Occupa lo slot
                 slot.IsOccupied = true;
                 slot.UserId = userId;
                 slot.StartedAt = DateTime.UtcNow;
                 await db.SaveChangesAsync();
+                await transaction.CommitAsync();
+
                 await auditLog.LogAsync("MigrationStarted", "WorkerService", $"UserId={userId}, Slot={slot.Id}", "InProgress");
 
                 try
                 {
+                    // Cerca utente nella tabella migrazioni
                     var user = await db.UserMigrations.FirstOrDefaultAsync(u => u.UserId == userId);
-                    if (user == null) throw new Exception("User not found");
 
-                    // Simula la migrazione
+                    // Se non esiste, lo creo
+                    if (user == null)
+                    {
+                        user = new UserMigration
+                        {
+                            UserId = userId,
+                            IsMigrated = false,
+                            Status = "InProgress"
+                        };
+                        db.UserMigrations.Add(user);
+                        await db.SaveChangesAsync();
+                    }
+
+                    // Simula la migrazione vera e propria
                     await Task.Delay(2000);
 
                     user.IsMigrated = true;
@@ -81,6 +102,8 @@ namespace Migration.Worker.services
 
                     await db.SaveChangesAsync();
                     await auditLog.LogAsync("MigrationSuccess", "WorkerService", $"UserId={userId}", "Success");
+
+                    await _channel.BasicAckAsync(ea.DeliveryTag, false);
                 }
                 catch (Exception ex)
                 {
@@ -90,6 +113,18 @@ namespace Migration.Worker.services
                         user.Status = $"Failed: {ex.Message}";
                         await db.SaveChangesAsync();
                     }
+                    else
+                    {
+                        // fallback se ancora non c'era traccia dell'utente
+                        db.UserMigrations.Add(new UserMigration
+                        {
+                            UserId = userId,
+                            IsMigrated = false,
+                            Status = $"Failed: {ex.Message}"
+                        });
+                        await db.SaveChangesAsync();
+                    }
+
                     await auditLog.LogAsync("MigrationFailed", "WorkerService", $"UserId={userId}, Error={ex.Message}", "Failed");
                 }
                 finally
@@ -101,11 +136,9 @@ namespace Migration.Worker.services
                     await db.SaveChangesAsync();
 
                     await auditLog.LogAsync("SlotReleased", "WorkerService", $"UserId={userId}, Slot={slot.Id}", "Done");
-
-                    // Conferma al broker
-                    await _channel.BasicAckAsync(ea.DeliveryTag, false);
                 }
             };
+
 
             await _channel.BasicConsumeAsync(queue: _queueName, autoAck: false, consumer: consumer);
             return Task.CompletedTask;

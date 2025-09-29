@@ -1,8 +1,10 @@
 ﻿using Infrastructure;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Migration.API.Services;
 using Migration.Infrastructure;
 using Migration.Infrastructure.models;
@@ -17,12 +19,13 @@ namespace Migration.API.Migration
         private readonly MigrationDbContext _db;
         private readonly RabbitMqService _rabbitMqService;
         private readonly IAuditLogService _auditLogService;
-
-        public MigrationController(MigrationDbContext db, RabbitMqService rabbitMqService,IAuditLogService auditLogService)
+        private readonly IMigrationService _migrationService;
+        public MigrationController(MigrationDbContext db, RabbitMqService rabbitMqService,IAuditLogService auditLogService , IMigrationService migrationService  )
         {
             _db = db;
             _rabbitMqService = rabbitMqService;
             _auditLogService = auditLogService;
+            _migrationService = migrationService;
         }
 
         [HttpPost("request")]
@@ -38,7 +41,18 @@ namespace Migration.API.Migration
                 status: "Pending"
             );
 
-            await _rabbitMqService.SendMessageAsync(oldUser.Id);
+            var user = _migrationService.GetUserMigrationAsync(oldUser).GetAwaiter().GetResult();
+            if (user != null) 
+            {
+                await _auditLogService.LogAsync(
+                userId: oldUser.Id.ToString(),
+                action: "MigrationRequested",
+                details: $"Requested migration for {oldUser.Id}",
+                status: "Reject - already migrated"
+            );
+                return BadRequest(new {message ="Utente già migrato"});
+            }
+            await _rabbitMqService.SendMessageAsync(new { oldUser.Id ,forced = false});
 
             return Ok(new { message = "Richiesta accettata" });
         }
@@ -48,20 +62,30 @@ namespace Migration.API.Migration
         // --------------------------
         [Authorize(Roles = "Administrator")]
         [HttpPost("force/{userId}")]
-        public async Task<IActionResult> ForceMigration(string userId)
+        public async Task<IActionResult> ForceMigration([FromBody] OldUser oldUser)
         {
-            var user = await _db.UserMigrations.FirstOrDefaultAsync(u => u.UserId == userId);
-            if (user == null) return NotFound("Utente non trovato");
+            await _auditLogService.LogAsync(
+                userId: oldUser.Id.ToString(),
+                action: "MigrationRequested - Admin",
+                details: $"Requested migration for {oldUser.Id} from administrator",
+                status: "Pending"
+            );
+            var user = _migrationService.GetUserMigrationAsync(oldUser);
+            if (user != null)
+            {
+                await _auditLogService.LogAsync(
+                userId: oldUser.Id.ToString(),
+                action: "MigrationRequested",
+                details: $"Requested migration for {oldUser.Id}",
+                status: "Reject - already migrated"
+            );
+                return BadRequest(new { message = "Utente già migrato" });
+            }
 
-            if (user.IsMigrated)
-                return BadRequest("Utente già migrato");
-
-            // Aggiorna lo stato a "Queued" se necessario
-            user.Status = "Queued";
-            await _db.SaveChangesAsync();
+           
 
             // Invia il messaggio al Worker
-            await _rabbitMqService.SendMessageAsync(new { UserId = userId });
+            await _rabbitMqService.SendMessageAsync(new { UserId = oldUser.Id , forced = true });
 
             return Ok(new { message = "Migrazione forzata avviata" });
         }
