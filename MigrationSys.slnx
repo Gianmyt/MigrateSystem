@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="docker-compose.yml" />
+  </Folder>
+  <Project Path="Migration.API/Migration.API.csproj" />
+  <Project Path="Migration.Infrastracture/Migration.Infrastructure.csproj" />
+  <Project Path="Migration.Worker/Migration.Worker.csproj" />
+</Solution>
