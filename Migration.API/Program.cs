@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Migration.API.Migration;
-using Migration.API.Services;
+using Migration.API.MqServices;
 using Migration.Infrastructure.models;
 using Migration.Infrastructure.services;
 using RabbitMQ.Client;

@@ -1,11 +1,12 @@
 ﻿using Infrastructure;
+using Infrastructure.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Migration.API.Services;
+using Migration.API.MqServices;
 using Migration.Infrastructure;
 using Migration.Infrastructure.models;
 using Migration.Infrastructure.services;
@@ -30,7 +31,7 @@ namespace Migration.API.Migration
 
         [HttpPost("request")]
         //[Authorize]
-        public async Task<IActionResult> RequestMigration([FromBody] OldUser oldUser)
+        public async Task<IActionResult> RequestMigration([FromBody] OldUser oldUser , int slotId)
         {
             var userId = User.Identity?.Name ?? "Unknown";
 
@@ -52,7 +53,7 @@ namespace Migration.API.Migration
             );
                 return BadRequest(new {message ="Utente già migrato"});
             }
-            await _rabbitMqService.SendMessageAsync(new { oldUser.Id ,forced = false});
+            await _rabbitMqService.SendMessageAsync(new MqModel { OldUser = oldUser, Forced = true, SlotId = slotId });
 
             return Ok(new { message = "Richiesta accettata" });
         }
@@ -85,14 +86,52 @@ namespace Migration.API.Migration
            
 
             // Invia il messaggio al Worker
-            await _rabbitMqService.SendMessageAsync(new { UserId = oldUser.Id , forced = true });
+            await _rabbitMqService.SendMessageAsync(new MqModel { OldUser = oldUser, Forced = true , SlotId = null});
 
             return Ok(new { message = "Migrazione forzata avviata" });
         }
 
-        // --------------------------
-        // 3. Statistiche globali (admin)
-        // --------------------------
+
+       // [Authorize]
+        [HttpPost("propose")]
+        public async Task<IActionResult> ProposeMigration([FromBody] OldUser oldUser)
+        {
+            var user = await _migrationService.GetUserMigrationAsync(oldUser);
+            if (user == null)
+            {
+                // Cerca uno slot libero o con prenotazione scaduta
+                //var slot = await _migrationService.GetSlotAsync(oldUser);
+                var slot = await _migrationService.TryReserveSlotAsync(oldUser);
+
+                if (slot == null)
+                {
+                    return Ok(new
+                    {
+                        canMigrate = false,
+                        message = "Nessuno slot disponibile"
+                    });
+                }
+              //  await _migrationService.TryReserveSlotAsync(oldUser);
+
+                // Riserva lo slot per 2 minuti
+
+
+                return Ok(new
+                {
+                    canMigrate = true,
+                    message = "Slot riservato per 2 minuti",
+                    slotId = slot.Id
+                });
+            }
+            else
+            {
+                return Ok(new
+                {
+                    canMigrate = false,
+                    message = "Utente già migrato"
+                });
+            }
+        }
         [Authorize(Roles = "Administrator")]
         [HttpGet("stats")]
         public async Task<IActionResult> GetStats()

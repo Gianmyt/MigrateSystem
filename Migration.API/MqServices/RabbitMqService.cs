@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Database;
 
-namespace Migration.API.Services
+namespace Migration.API.MqServices
 {
     public class RabbitMqService
     {

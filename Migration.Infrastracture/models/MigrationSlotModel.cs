@@ -14,6 +14,8 @@ namespace Infrastructure.Models
         public bool IsOccupied { get; set; } = false;
         public string? UserId { get; set; }
         public DateTime? StartedAt { get; set; }
+        public bool IsReserved { get; set; }
+        public DateTime? ReservedUntil { get; set; }
     }
 
 }

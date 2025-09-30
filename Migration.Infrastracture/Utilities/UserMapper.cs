@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-namespace Migration.Infrastructure
+namespace Migration.Infrastructure.Utilities
 {
     public static class UserMapper
     {

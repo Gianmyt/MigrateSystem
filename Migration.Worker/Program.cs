@@ -33,7 +33,8 @@ var host = Host.CreateDefaultBuilder(args)
         });
 
         // Worker
-        services.AddHostedService<Migration.Worker.services.MigrationWorkerService>();
+        services.AddHostedService<MigrationWorkerService>();
+        services.AddHostedService<ReservationCleanupService>();
     })
     .Build();
 

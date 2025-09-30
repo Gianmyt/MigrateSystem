@@ -25,15 +25,5 @@ namespace Migration.Infrastructure.models
         public DateTime MigratedAt { get; set; }
     }
 
-    public class MigrationRequest
-    {
-        public Guid Id { get; set; }
-        public string UserId { get; set; } = string.Empty;
-        public int Priority { get; set; } = 0;
-        public string Status { get; set; } = "Pending"; // Pending/InProgress/Completed/Failed
-        public int Attempts { get; set; } = 0;
-        public string? LastError { get; set; }
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-        public DateTime? UpdatedAt { get; set; }
-    }
+    
 }
