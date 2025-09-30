@@ -3,6 +3,7 @@
     <File Path="docker-compose.yml" />
     <File Path="SlotInsert.sql" />
   </Folder>
+  <Project Path="ApiGateway/ApiGateway.csproj" Id="b69aa70c-8cd0-496b-9273-6091cf361c35" />
   <Project Path="Migration.API/Migration.API.csproj" />
   <Project Path="Migration.Infrastracture/Migration.Infrastructure.csproj" />
   <Project Path="Migration.Worker/Migration.Worker.csproj" />
