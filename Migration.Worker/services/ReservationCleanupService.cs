@@ -30,7 +30,7 @@ namespace Migration.Worker.services
                     var db = scope.ServiceProvider.GetRequiredService<MigrationDbContext>();
 
                     var expiredReservations = await db.MigrationSlots
-                        .Where(s => s.IsReserved && s.ReservedUntil < DateTime.UtcNow)
+                        .Where(s => s.IsReserved && s.ReservedUntil.Value.AddMinutes(-2) < DateTime.UtcNow && !s.IsOccupied)
                         .ToListAsync();
 
                     if (expiredReservations.Any())
@@ -39,7 +39,7 @@ namespace Migration.Worker.services
                         {
                             slot.IsReserved = false;
                             slot.ReservedUntil = null;
-                            slot.UserId = null; // opzionale: resetti anche il legame utente
+                            slot.UserId = null; 
                         }
 
                         await db.SaveChangesAsync(stoppingToken);
@@ -47,7 +47,6 @@ namespace Migration.Worker.services
                 }
                 catch (Exception ex)
                 {
-                    // loggare eventuali errori
                     Console.WriteLine($"[ReservationCleanup] Errore: {ex.Message}");
                 }
 

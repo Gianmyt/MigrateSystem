@@ -10,6 +10,7 @@ using Migration.API.MqServices;
 using Migration.Infrastructure;
 using Migration.Infrastructure.models;
 using Migration.Infrastructure.services;
+using static Migration.API.Migration.MigrationModel;
 
 namespace Migration.API.Migration
 {
@@ -17,13 +18,11 @@ namespace Migration.API.Migration
     [Route("api/[controller]")]
     public class MigrationController : ControllerBase
     {
-        private readonly MigrationDbContext _db;
         private readonly RabbitMqService _rabbitMqService;
         private readonly IAuditLogService _auditLogService;
         private readonly IMigrationService _migrationService;
-        public MigrationController(MigrationDbContext db, RabbitMqService rabbitMqService,IAuditLogService auditLogService , IMigrationService migrationService  )
+        public MigrationController(RabbitMqService rabbitMqService,IAuditLogService auditLogService , IMigrationService migrationService  )
         {
-            _db = db;
             _rabbitMqService = rabbitMqService;
             _auditLogService = auditLogService;
             _migrationService = migrationService;
@@ -31,29 +30,28 @@ namespace Migration.API.Migration
 
         [HttpPost("request")]
         //[Authorize]
-        public async Task<IActionResult> RequestMigration([FromBody] OldUser oldUser , int slotId)
+        public async Task<IActionResult> RequestMigration([FromBody] MigrationRequestDto dto )
         {
-            var userId = User.Identity?.Name ?? "Unknown";
 
             await _auditLogService.LogAsync(
-                userId:oldUser.Id.ToString(),
+                userId:dto.OldUser.Id.ToString(),
                 action: "MigrationRequested",
-                details: $"Requested migration for {oldUser.Id}",
+                details: $"Requested migration for {dto.OldUser.Id}",
                 status: "Pending"
             );
 
-            var user = _migrationService.GetUserMigrationAsync(oldUser).GetAwaiter().GetResult();
+            var user = _migrationService.GetUserMigrationAsync(dto.OldUser).GetAwaiter().GetResult();
             if (user != null) 
             {
                 await _auditLogService.LogAsync(
-                userId: oldUser.Id.ToString(),
+                userId: dto.OldUser.Id.ToString(),
                 action: "MigrationRequested",
-                details: $"Requested migration for {oldUser.Id}",
+                details: $"Requested migration for {dto.OldUser.Id}",
                 status: "Reject - already migrated"
             );
                 return BadRequest(new {message ="Utente già migrato"});
             }
-            await _rabbitMqService.SendMessageAsync(new MqModel { OldUser = oldUser, Forced = true, SlotId = slotId });
+            await _rabbitMqService.SendMessageAsync(new MqModel { OldUser = dto.OldUser, Forced = false, SlotId = dto.slotId });
 
             return Ok(new { message = "Richiesta accettata" });
         }
@@ -62,23 +60,24 @@ namespace Migration.API.Migration
         // 2. Migrazione forzata (admin)
         // --------------------------
         [Authorize(Roles = "Administrator")]
-        [HttpPost("force/{userId}")]
-        public async Task<IActionResult> ForceMigration([FromBody] OldUser oldUser)
+        [HttpPost("force")]
+        public async Task<IActionResult> ForceMigration([FromBody] AdministrativeMigrationRequestDto dto)
         {
             await _auditLogService.LogAsync(
-                userId: oldUser.Id.ToString(),
+                userId: dto.OldUser.Id.ToString(),
                 action: "MigrationRequested - Admin",
-                details: $"Requested migration for {oldUser.Id} from administrator",
+                details: $"Requested migration for {dto.OldUser.Id} from administrator",
                 status: "Pending"
             );
-            var user = _migrationService.GetUserMigrationAsync(oldUser);
+            var user = _migrationService.GetUserMigrationAsync(dto.OldUser);
             if (user != null)
             {
                 await _auditLogService.LogAsync(
-                userId: oldUser.Id.ToString(),
+                userId: dto.OldUser.Id.ToString(),
                 action: "MigrationRequested",
-                details: $"Requested migration for {oldUser.Id}",
-                status: "Reject - already migrated"
+                details: $"User already migrated {dto.OldUser.Id}",
+                status: "Reject",
+                success : false
             );
                 return BadRequest(new { message = "Utente già migrato" });
             }
@@ -86,7 +85,7 @@ namespace Migration.API.Migration
            
 
             // Invia il messaggio al Worker
-            await _rabbitMqService.SendMessageAsync(new MqModel { OldUser = oldUser, Forced = true , SlotId = null});
+            await _rabbitMqService.SendMessageAsync(new MqModel { OldUser = dto.OldUser, Forced = true , SlotId = null});
 
             return Ok(new { message = "Migrazione forzata avviata" });
         }
@@ -94,14 +93,14 @@ namespace Migration.API.Migration
 
        // [Authorize]
         [HttpPost("propose")]
-        public async Task<IActionResult> ProposeMigration([FromBody] OldUser oldUser)
+        public async Task<IActionResult> ProposeMigration([FromBody] MigrationSlotReservationDto dto)
         {
-            var user = await _migrationService.GetUserMigrationAsync(oldUser);
+            var user = await _migrationService.GetUserMigrationAsync(dto.OldUser);
             if (user == null)
             {
                 // Cerca uno slot libero o con prenotazione scaduta
                 //var slot = await _migrationService.GetSlotAsync(oldUser);
-                var slot = await _migrationService.TryReserveSlotAsync(oldUser);
+                var slot = await _migrationService.TryReserveSlotAsync(dto.OldUser);
 
                 if (slot == null)
                 {
@@ -132,27 +131,7 @@ namespace Migration.API.Migration
                 });
             }
         }
-        
-
-        
-
-        // --------------------------
-        // 4. Dettaglio utente (opzionale)
-        // --------------------------
-        [Authorize(Roles = "Administrator")]
-        [HttpGet("{userId}")]
-        public async Task<IActionResult> GetUserStatus(string userId)
-        {
-            var user = await _db.UserMigrations.FirstOrDefaultAsync(u => u.UserId == userId);
-            if (user == null) return NotFound("Utente non trovato");
-
-            return Ok(new
-            {
-                user.UserId,
-                user.IsMigrated,
-                user.Status,
-                user.MigrationDate
-            });
-        }
+       
+       
     }
 }

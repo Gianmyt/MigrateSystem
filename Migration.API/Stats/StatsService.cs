@@ -6,7 +6,7 @@ namespace Migration.API.Stats
 {
     public interface IStatsService
     {
-        Task<InProgressResult> GetInProgressasync();
+        Task<InProgressResultDto> GetInProgressasync();
     }
     public class StatsService : IStatsService
     {
@@ -16,7 +16,7 @@ namespace Migration.API.Stats
             _db = db;
         }
 
-        public async Task<InProgressResult> GetInProgressasync()
+        public async Task<InProgressResultDto> GetInProgressasync()
         {
             var migrations = await _db.UserMigrations
         .Where(u => u.Status == "InProgress")
@@ -26,7 +26,7 @@ namespace Migration.API.Stats
                 .Where(s => s.IsOccupied)
                 .ToListAsync();
 
-            return new InProgressResult
+            return new InProgressResultDto
             {
                 ActiveMigrations = migrations,
                 OccupiedSlots = slots

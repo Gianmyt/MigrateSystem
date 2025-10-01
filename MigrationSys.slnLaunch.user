@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "New Profile",
+    "Projects": [
+      {
+        "Path": "Migration.API\\Migration.API.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "Migration.Worker\\Migration.Worker.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

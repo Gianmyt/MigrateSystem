@@ -81,9 +81,11 @@ namespace Migration.Worker.services
 
                     if (slot == null)
                     {
-                        await auditLog.LogAsync("SlotUnavailable", "WorkerService", $"User={oldUser.Id}", "Failed");
+                        await auditLog.LogAsync(oldUser.Id.ToString(), "SlotUnavailable", "WorkerService", $"User={oldUser.Id}", "Failed");
                         await _channel.BasicNackAsync(ea.DeliveryTag, false, true);
-                        await auditLog.LogAsync("Retry beacuse slot unavailable", "WorkerService", $"User={oldUser.Id}", "Info");
+
+
+                        await auditLog.LogAsync(userId: oldUser.Id.ToString(),action: "Slot Reservation",details: $"Try slot reservation for {oldUser.Id} failed",status: "Failed", success: false);
 
                         return;
                     }
@@ -93,7 +95,7 @@ namespace Migration.Worker.services
                     slot.StartedAt = DateTime.UtcNow;
                     await db.SaveChangesAsync();
 
-                    await auditLog.LogAsync("MigrationStarted", "WorkerService", $"UserId={oldUser.Id}, Slot={slot.Id}", "InProgress");
+                    await auditLog.LogAsync(userId: oldUser.Id.ToString(), action: "Slot Reservation", details: $"Try slot reservation for {oldUser.Id} success ", status: "InProgress");
 
                     // 2) Verifica duplicati
                     var alreadyMigrated = await db.UserMigrations
@@ -101,7 +103,8 @@ namespace Migration.Worker.services
 
                     if (alreadyMigrated)
                     {
-                        await auditLog.LogAsync("MigrationSkipped", "WorkerService", $"UserId={oldUser.Id}", "AlreadyMigrated");
+                        await auditLog.LogAsync(userId: oldUser.Id.ToString(), action: "Validation ", details: $"Check user already migrated", status: "Failed" , success:false);
+
                         await tx.RollbackAsync();
                         await _channel.BasicAckAsync(ea.DeliveryTag, false);
                         return;
@@ -122,21 +125,22 @@ namespace Migration.Worker.services
 
                     await db.SaveChangesAsync();
                     await tx.CommitAsync();
+                    await auditLog.LogAsync(userId: oldUser.Id.ToString(), action: "Migration", details: $"Migration for {oldUser.Id} ", status: "Success");
 
-                    await auditLog.LogAsync("MigrationSuccess", "WorkerService", $"UserId={oldUser.Id}", "Success");
 
                     await _channel.BasicAckAsync(ea.DeliveryTag, false);
                 }
                 catch (ArgumentException argEx)
                 {
-                    await auditLog.LogAsync("ValidationFailed", "WorkerService",
-                        $"UserId={oldUser?.Id}, Error={argEx.Message}", "Failed");
+                    
+                    await auditLog.LogAsync(userId: oldUser.Id.ToString(), action: "WorkerService : Validation", details: $"Error={argEx.Message}", status: "Failed", success: false);
 
                     await _channel.BasicAckAsync(ea.DeliveryTag, false); // non rimettiamo in coda
                 }
                 catch (Exception ex)
                 {
-                    await auditLog.LogAsync("MigrationFailed", "WorkerService", $"UserId={oldUser?.Id}, Error={ex.Message}", "Failed");
+                    await auditLog.LogAsync(userId: oldUser.Id.ToString(), action: "WorkerService : Migration", details: $"Error={ex.Message}", status: "Failed", success: false);
+
 
                     await _channel.BasicNackAsync(ea.DeliveryTag, false, true); // errore transiente → retry
                 }
@@ -151,7 +155,7 @@ namespace Migration.Worker.services
                         slot.ReservedUntil = null;
                         await db.SaveChangesAsync();
 
-                        await auditLog.LogAsync("SlotReleased", "WorkerService", $"UserId={oldUser?.Id}, Slot={slot.Id}", "Done");
+
                     }
                 }
             };

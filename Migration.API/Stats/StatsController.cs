@@ -13,15 +13,10 @@ namespace Migration.API.Stats
     [ApiController]
     public class StatsController : ControllerBase
     {
-        private readonly MigrationDbContext _db;
-        private readonly RabbitMqService _rabbitMqService;
         private readonly IAuditLogService _auditLogService;
         private readonly IStatsService _statsService;
-        public StatsController(MigrationDbContext db, RabbitMqService rabbitMqService, IAuditLogService auditLogService, IStatsService statsService)
+        public StatsController( IStatsService statsService)
         {
-            _db = db;
-            _rabbitMqService = rabbitMqService;
-            _auditLogService = auditLogService;
             _statsService = statsService;
         }
 

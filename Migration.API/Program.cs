@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Migration.API.Audit;
 using Migration.API.Middleware;
 using Migration.API.Migration;
 using Migration.API.MqServices;
@@ -48,6 +49,7 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddSingleton<RabbitMqService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IMigrationService,MigrationService>();
 builder.Services.AddScoped<IStatsService, StatsService>();
 builder.Services.AddControllers();
