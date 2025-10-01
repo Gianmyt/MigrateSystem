@@ -132,24 +132,9 @@ namespace Migration.API.Migration
                 });
             }
         }
-        [Authorize(Roles = "Administrator")]
-        [HttpGet("stats")]
-        public async Task<IActionResult> GetStats()
-        {
-            var total = await _db.UserMigrations.CountAsync();
-            var migrated = await _db.UserMigrations.CountAsync(u => u.IsMigrated);
-            var failed = await _db.UserMigrations.CountAsync(u => u.Status != null && u.Status.StartsWith("Failed"));
-            var queued = await _db.UserMigrations.CountAsync(u => u.Status == "Queued");
+        
 
-            return Ok(new
-            {
-                totalUsers = total,
-                migratedUsers = migrated,
-                failedUsers = failed,
-                queuedUsers = queued,
-                percentMigrated = total > 0 ? Math.Round((double)migrated / total * 100, 2) : 0
-            });
-        }
+        
 
         // --------------------------
         // 4. Dettaglio utente (opzionale)

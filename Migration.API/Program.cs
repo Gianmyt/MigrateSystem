@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Migration.API.Middleware;
 using Migration.API.Migration;
 using Migration.API.MqServices;
+using Migration.API.Stats;
 using Migration.Infrastructure.models;
 using Migration.Infrastructure.services;
 using RabbitMQ.Client;
@@ -47,6 +49,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddSingleton<RabbitMqService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IMigrationService,MigrationService>();
+builder.Services.AddScoped<IStatsService, StatsService>();
 builder.Services.AddControllers();
 builder.Services.AddSingleton<IConnection>(sp =>
 {
@@ -62,6 +65,7 @@ builder.Services.AddSingleton<IConnection>(sp =>
     return factory.CreateConnectionAsync().GetAwaiter().GetResult();
 });
 var app = builder.Build();
+app.UseMiddleware<ErrorHandlingMiddleware>();
 app.UseSwaggerUI(options => options.SwaggerEndpoint("/openapi/v1.json", "Swagger"));// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
