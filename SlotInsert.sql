@@ -1,2 +1,2 @@
-﻿INSERT INTO MigrationSlots (IsOccupied) VALUES (0);
+﻿INSERT INTO MigrationSlots (IsOccupied, IsReserved) VALUES (0, 0);
 GO 5
