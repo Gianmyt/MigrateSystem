@@ -12,6 +12,7 @@ namespace Migration.API.Migration
         Task<MigrationSlot?> GetSlotAsync(OldUser oldUser);
         Task<int> ReserveSlot(OldUser oldUser, MigrationSlot slot);
         Task<MigrationSlot?> TryReserveSlotAsync(OldUser oldUser);
+        Task<MigrationSlot?> TryReserveSlotAsyncNoLock(OldUser oldUser);
     }
     public class MigrationService : IMigrationService
     {
@@ -19,6 +20,38 @@ namespace Migration.API.Migration
         public MigrationService(MigrationDbContext db)
         {
             _db = db;
+        }
+        public async Task<MigrationSlot?> TryReserveSlotAsyncNoLock(OldUser oldUser)
+        {
+            // 1) Se esiste già una prenotazione attiva per questo utente → non farne un’altra
+            var alreadyReserved = await _db.MigrationSlots.AnyAsync(
+                s => s.UserId == oldUser.Id.ToString()
+                  && s.IsReserved
+                  && s.ReservedUntil > DateTime.UtcNow);
+
+            if (alreadyReserved)
+                return null;
+
+            // 2) Tentativo di claim atomico su uno slot libero
+            var rows = await _db.Database.ExecuteSqlRawAsync(
+                @"UPDATE TOP (1) MigrationSlots
+          SET IsReserved = 1,
+              ReservedUntil = DATEADD(MINUTE, 2, GETUTCDATE()),
+              UserId = {0}
+          WHERE IsOccupied = 0
+            AND (IsReserved = 0 OR ReservedUntil < GETUTCDATE())",
+                oldUser.Id);
+
+            if (rows == 0)
+                return null; // nessuno slot disponibile
+
+            // 3) Recupera lo slot appena prenotato (quello di questo utente)
+            var slot = await _db.MigrationSlots
+                .Where(s => s.UserId == oldUser.Id.ToString() && s.IsReserved)
+                .OrderByDescending(s => s.ReservedUntil)
+                .FirstOrDefaultAsync();
+
+            return slot;
         }
 
         public async Task<MigrationSlot?> TryReserveSlotAsync(OldUser oldUser)
