@@ -2,6 +2,7 @@
   <Folder Name="/Solution Items/">
     <File Path="docker-compose.yml" />
     <File Path="SlotInsert.sql" />
+    <File Path="swagger.json" />
   </Folder>
   <Project Path="ApiGateway/ApiGateway.csproj" Id="b69aa70c-8cd0-496b-9273-6091cf361c35" />
   <Project Path="Migration.API/Migration.API.csproj" />

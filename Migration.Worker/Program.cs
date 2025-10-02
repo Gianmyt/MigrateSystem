@@ -10,14 +10,11 @@ using RabbitMQ.Client;
 var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((context, services) =>
     {
-        // DbContext SQL Server
         services.AddDbContext<MigrationDbContext>(options =>
             options.UseSqlServer(context.Configuration.GetConnectionString("DefaultConnection")));
 
-        // Audit log
         services.AddScoped<IAuditLogService, AuditLogService>();
 
-        // RabbitMQ IConnection registrato come singleton
         services.AddSingleton<IConnection>(sp =>
         {
 
@@ -32,7 +29,6 @@ var host = Host.CreateDefaultBuilder(args)
             return factory.CreateConnectionAsync().GetAwaiter().GetResult();
         });
 
-        // Worker
         services.AddHostedService<MigrationWorkerService>();
         services.AddHostedService<ReservationCleanupService>();
     })

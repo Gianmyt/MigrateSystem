@@ -20,7 +20,7 @@ namespace Migration.API.Audit
             _auditService = auditService;
         }
 
-        //[Authorize(Roles = "Administrator")]
+        [Authorize(Roles = "Administrator")]
         [HttpGet("audit/report")]
         public async Task<IActionResult> GetAuditReport([FromQuery] DateTime? from, [FromQuery] DateTime? to)
         {

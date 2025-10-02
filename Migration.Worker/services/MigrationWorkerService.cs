@@ -62,10 +62,8 @@ namespace Migration.Worker.services
 
                 try
                 {
-                    // ---- Transazione completa: slot + migrazione ----
                     await using var tx = await db.Database.BeginTransactionAsync();
 
-                    // 1) Selezione slot
                     if (forced)
                     {
                         slot = await db.MigrationSlots
@@ -97,7 +95,6 @@ namespace Migration.Worker.services
 
                     await auditLog.LogAsync(userId: oldUser.Id.ToString(), action: "Slot Reservation", details: $"Try slot reservation for {oldUser.Id} success ", status: "InProgress");
 
-                    // 2) Verifica duplicati
                     var alreadyMigrated = await db.UserMigrations
                         .AnyAsync(u => u.UserId == oldUser.Id.ToString() && u.IsMigrated);
 
@@ -110,11 +107,9 @@ namespace Migration.Worker.services
                         return;
                     }
 
-                    // 3) Mapping e normalizzazione (può lanciare ArgumentException)
                     var newUser = UserMapper.Map(oldUser);
 
-                    // 4) Salvataggio
-                    //db.NewUsers.Add(newUser);
+                    
                     db.UserMigrations.Add(new UserMigration
                     {
                         UserId = oldUser.Id.ToString(),

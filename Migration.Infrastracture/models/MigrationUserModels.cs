@@ -9,15 +9,14 @@ namespace Migration.Infrastructure.models
     public class OldUser
     {
         public int Id { get; set; }
-        public string FullName { get; set; } = string.Empty; // "Mario Rossi"
-        public string Mail { get; set; } = string.Empty;     // " mario.rossi@email.it "
-        public string? Phone { get; set; }                   // "0039-3331234567"
+        public string FullName { get; set; } = string.Empty; 
+        public string Mail { get; set; } = string.Empty;     
+        public string? Phone { get; set; }                   
     }
 
-    // Nuovo modello (NEW)
     public class NewUser
     {
-        public Guid UserId { get; set; }                     // nuovo formato chiave
+        public Guid UserId { get; set; }                     
         public string FirstName { get; set; } = string.Empty;
         public string LastName { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;

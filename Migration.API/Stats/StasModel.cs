@@ -1,5 +1,6 @@
 ﻿using Infrastructure;
 using Infrastructure.Models;
+using Migration.Infrastructure.models;
 
 namespace Migration.API.Stats
 {

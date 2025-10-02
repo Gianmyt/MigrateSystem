@@ -4,20 +4,20 @@ namespace Migration.API.Migration
 {
     public class MigrationModel
     {
-        public class MigrationRequestDto
+        public class MigrationRequest
         {
             public OldUser OldUser { get; set; } = new();
             public int slotId { get; set; }
 
         }
 
-        public class MigrationSlotReservationDto
+        public class MigrationSlotReservation
         {
             public OldUser OldUser { get; set; } = new();
 
         }
 
-        public class AdministrativeMigrationRequestDto
+        public class AdministrativeMigrationRequest
         {
             public OldUser OldUser { get; set; } = new();
 

@@ -29,8 +29,8 @@ namespace Migration.API.Migration
         }
 
         [HttpPost("request")]
-        //[Authorize]
-        public async Task<IActionResult> RequestMigration([FromBody] MigrationRequestDto dto )
+        [Authorize]
+        public async Task<IActionResult> RequestMigration([FromBody] MigrationRequest dto )
         {
 
             await _auditLogService.LogAsync(
@@ -56,12 +56,9 @@ namespace Migration.API.Migration
             return Ok(new { message = "Richiesta accettata" });
         }
 
-        // --------------------------
-        // 2. Migrazione forzata (admin)
-        // --------------------------
         [Authorize(Roles = "Administrator")]
         [HttpPost("force")]
-        public async Task<IActionResult> ForceMigration([FromBody] AdministrativeMigrationRequestDto dto)
+        public async Task<IActionResult> ForceMigration([FromBody] AdministrativeMigrationRequest dto)
         {
             await _auditLogService.LogAsync(
                 userId: dto.OldUser.Id.ToString(),
@@ -83,23 +80,19 @@ namespace Migration.API.Migration
             }
 
            
-
-            // Invia il messaggio al Worker
             await _rabbitMqService.SendMessageAsync(new MqModel { OldUser = dto.OldUser, Forced = true , SlotId = null});
 
             return Ok(new { message = "Migrazione forzata avviata" });
         }
 
 
-       // [Authorize]
+        [Authorize]
         [HttpPost("propose")]
-        public async Task<IActionResult> ProposeMigration([FromBody] MigrationSlotReservationDto dto)
+        public async Task<IActionResult> ProposeMigration([FromBody] MigrationSlotReservation dto)
         {
             var user = await _migrationService.GetUserMigrationAsync(dto.OldUser);
             if (user == null)
             {
-                // Cerca uno slot libero o con prenotazione scaduta
-                //var slot = await _migrationService.GetSlotAsync(oldUser);
                 var slot = await _migrationService.TryReserveSlotAsync(dto.OldUser);
 
                 if (slot == null)
@@ -110,9 +103,7 @@ namespace Migration.API.Migration
                         message = "Nessuno slot disponibile"
                     });
                 }
-              //  await _migrationService.TryReserveSlotAsync(oldUser);
 
-                // Riserva lo slot per 2 minuti
 
 
                 return Ok(new

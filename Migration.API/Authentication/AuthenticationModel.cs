@@ -1,9 +1,6 @@
 ﻿namespace Migration.API.Authentication
 {
-    public class AuthenticationModel
-    {
-
-    }
+    
 
     public class LoginRequest
     {

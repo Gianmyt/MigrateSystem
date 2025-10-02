@@ -13,7 +13,7 @@ namespace Migration.Worker.services
     public class ReservationCleanupService : BackgroundService
     {
         private readonly IServiceScopeFactory _scopeFactory;
-        private readonly TimeSpan _interval = TimeSpan.FromMinutes(1); // esegue ogni minuto
+        private readonly TimeSpan _interval = TimeSpan.FromMinutes(1); 
 
         public ReservationCleanupService(IServiceScopeFactory scopeFactory)
         {

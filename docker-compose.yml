@@ -27,10 +27,9 @@ volumes:
 
 
 
-  version: "3.9"
+# version: "3.9"
 
 # services:
-#   # Database SQL Server
 #   sqlserver:
 #     image: mcr.microsoft.com/mssql/server:2022-latest
 #     environment:
@@ -41,16 +40,14 @@ volumes:
 #     networks:
 #       - migration-net
 
-#   # RabbitMQ
 #   rabbitmq:
 #     image: rabbitmq:3-management
 #     ports:
 #       - "5672:5672"
-#       - "15672:15672" # interfaccia web
+#       - "15672:15672"
 #     networks:
 #       - migration-net
 
-#   # Migration.Api (Auth + Migration) con 3 repliche
 #   migration-api:
 #     image: migration-api:latest
 #     build:
@@ -63,14 +60,17 @@ volumes:
 #       - ASPNETCORE_ENVIRONMENT=Development
 #       - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=MigrationDb;User=sa;Password=Your_password123;TrustServerCertificate=True;
 #       - RabbitMQ__Host=rabbitmq
+#       - Jwt__Key=o9tKlf7xJGUP86YQzPKDRqMIJOyWGblquqJ10oMRikw=!ABCDEF
+#       - Jwt__Issuer=Auth.Api
+#       - Jwt__Audience=MigrationClients
+#       - Jwt__ExpiryMinutes=60
 #     networks:
 #       - migration-net
+#     ports:
+#       - "7161:80"   
 #     deploy:
-#       replicas: 3 # qui indichi quante repliche vuoi
-#     expose:
-#       - "80"
+#       replicas: 3  
 
-#   # Ocelot Gateway
 #   ocelot-gateway:
 #     image: migration-gateway:latest
 #     build:
