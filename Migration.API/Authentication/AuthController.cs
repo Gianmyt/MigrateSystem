@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
@@ -13,34 +14,22 @@ namespace Migration.API.Authentication
     public class AuthController : ControllerBase
     {
         private readonly IConfiguration _config;
-        public AuthController(IConfiguration config) => _config = config;
+        private readonly IAuthService _authService;
 
-        [HttpPost("login")]
-        public IActionResult Login([FromBody] LoginRequest request)
+        public AuthController(IConfiguration config , IAuthService authService)
         {
-            // **Per test**: user admin/admin
-            if (request.Username != "admin" || request.Password != "admin")
-                return Unauthorized();
+            _config = config;
+            _authService = authService;
+        }
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginRequest request, IAuthService authService)
+        {
+            var token = await _authService.AuthenticateAsync(request.Username, request.Password);
 
-            var jwtConfig = _config.GetSection("Jwt");
-            var key = Encoding.ASCII.GetBytes(jwtConfig["Key"]);
+            if (token == null)
+                return Unauthorized(new { Message = "Invalid credentials" });
 
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var tokenDescriptor = new SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(new Claim[]
-                {
-                new Claim(ClaimTypes.Name, request.Username),
-                new Claim(ClaimTypes.Role, "Administrator")
-                }),
-                Expires = DateTime.UtcNow.AddMinutes(double.Parse(jwtConfig["ExpiryMinutes"])),
-                Issuer = jwtConfig["Issuer"],
-                Audience = jwtConfig["Audience"],
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
-            };
-
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            return Ok(new { Token = tokenHandler.WriteToken(token) });
+            return Ok(new { Token = token });
         }
     }
 }
