@@ -21,7 +21,7 @@ namespace Migration.API.Stats
         }
 
 
-       // [Authorize(Roles = "Administrator")]
+        [Authorize(Roles = "Administrator")]
         [HttpGet("in-progress")]
         public async Task<IActionResult> GetInProgress()
         {

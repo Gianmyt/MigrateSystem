@@ -28,8 +28,8 @@ namespace Migration.API.Migration
             _migrationService = migrationService;
         }
 
-        [HttpPost("request")]
         [Authorize]
+        [HttpPost("request")]        
         public async Task<IActionResult> RequestMigration([FromBody] MigrationRequest dto )
         {
 
