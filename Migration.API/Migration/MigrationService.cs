@@ -59,15 +59,28 @@ namespace Migration.API.Migration
             // Transazione: basta ReadCommitted perché usiamo i lock espliciti
             await using var tx = await _db.Database.BeginTransactionAsync();
 
-            // 1) Lock applicativo per-utente (impedisce due prenotazioni concorrenti dello stesso utente)
-            var lockRes =  await _db.Database.ExecuteSqlRawAsync(
-                "SELECT 1 FROM MigrationSlots WITH(TABLOCKX, HOLDLOCK)" );
+            // 1) Lock logico per utente tramite sp_getapplock
+            var userLockResult = await _db.Database.ExecuteSqlRawAsync(@"
+        DECLARE @result INT;
+        EXEC @result = sp_getapplock 
+            @Resource = {0}, 
+            @LockMode = 'Exclusive', 
+            @LockOwner = 'Transaction', 
+            @LockTimeout = 5000; -- 5 secondi timeout
+        SELECT @result;", "User_" + oldUser.Id);
 
-            
+            // -1: errore, -2: timeout, -3: cancellato, -999: non disponibile
+            if (userLockResult < 0)
+            {
+                await tx.RollbackAsync();
+                return null;
+            }
 
-            // 2) Se esiste già una prenotazione ATTIVA per questo utente → non farne un’altra
+            // 2) Se esiste già una prenotazione attiva per questo utente → abort
             var alreadyReserved = await _db.MigrationSlots.AnyAsync(
-                s => s.UserId == oldUser.Id.ToString() && s.IsReserved && s.ReservedUntil > DateTime.UtcNow);
+                s => s.UserId == oldUser.Id.ToString() &&
+                     s.IsReserved &&
+                     s.ReservedUntil > DateTime.UtcNow);
 
             if (alreadyReserved)
             {
@@ -75,7 +88,7 @@ namespace Migration.API.Migration
                 return null;
             }
 
-            // 3) Claim di uno slot libero: UPDLOCK/ROWLOCK/READPAST evita il thundering herd
+            // 3) Claim di uno slot libero (row-level locking)
             var slot = await _db.MigrationSlots
                 .FromSqlRaw(
                     "SELECT TOP(1) * " +
@@ -86,16 +99,17 @@ namespace Migration.API.Migration
             if (slot == null)
             {
                 await tx.RollbackAsync();
-                return null; // nessuno slot disponibile adesso
+                return null;
             }
 
             // 4) Scrivi la prenotazione
             slot.IsReserved = true;
             slot.ReservedUntil = DateTime.UtcNow.AddMinutes(2);
-            slot.UserId = oldUser.Id.ToString(); // sovrascrive eventuale UserId “stale” di una prenotazione scaduta
-            await _db.SaveChangesAsync();
+            slot.UserId = oldUser.Id.ToString();
 
+            await _db.SaveChangesAsync();
             await tx.CommitAsync();
+
             return slot;
         }
 
