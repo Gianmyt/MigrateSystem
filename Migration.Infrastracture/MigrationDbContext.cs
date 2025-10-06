@@ -12,7 +12,8 @@ namespace Infrastructure
         public DbSet<UserMigration> UserMigrations => Set<UserMigration>();
         public DbSet<MigrationSlot> MigrationSlots => Set<MigrationSlot>();
         public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+
     }
 
-    
+
 }

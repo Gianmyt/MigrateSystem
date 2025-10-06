@@ -1,0 +1,25 @@
+{
+  "User": {
+    "FullName": [
+      {
+        "Pattern": "\\s+",
+        "Replace": " "
+      },
+      { "Transform": "Capitalize" }
+    ],
+    "Mail": [
+      { "Transform": "Lower" },
+      {
+        "Pattern": "\\s",
+        "Replace": ""
+      }
+    ],
+    "Phone": [
+      {
+        "Pattern": "[^0-9+]",
+        "Replace": ""
+      },
+      { "Prefix": "+39" }
+    ]
+  }
+}
