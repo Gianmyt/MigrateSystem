@@ -9,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Migration.Infrastructure.models;
 using Migration.Infrastructure.services;
 using Migration.Infrastructure.Utilities;
+using Migration.Worker.saga;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using System.Text;
@@ -38,12 +39,11 @@ namespace Migration.Worker.services
             _channel.QueueDeclareAsync(queue: _queueName, durable: true, exclusive: false, autoDelete: false, arguments: null);
         }
 
-        protected override async Task<Task> ExecuteAsync(CancellationToken stoppingToken)
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             var consumer = new AsyncEventingBasicConsumer(_channel);
             consumer.ReceivedAsync += async (model, ea) =>
             {
-                MigrationSlot? slot = null;
                 var body = ea.Body.ToArray();
                 var mqReq = JsonSerializer.Deserialize<MqModel>(Encoding.UTF8.GetString(body));
                 var oldUser = mqReq?.OldUser;
@@ -62,19 +62,13 @@ namespace Migration.Worker.services
 
                 try
                 {
+                    // Se forced → salta la saga e migra direttamente
                     if (forced)
                     {
-                        var alreadyMigrated = await db.UserMigrations
-                            .AnyAsync(u => u.UserId == oldUser.Id.ToString() && u.IsMigrated);
-
-                        if (alreadyMigrated)
+                        var already = await db.UserMigrations.AnyAsync(u => u.UserId == oldUser.Id.ToString() && u.IsMigrated);
+                        if (already)
                         {
-                            await auditLog.LogAsync(userId: oldUser.Id.ToString(),
-                                action: "Forced Migration",
-                                details: $"User {oldUser.Id} already migrated",
-                                status: "Skipped",
-                                success: false);
-
+                            await auditLog.LogAsync(oldUser.Id.ToString(), "ForcedMigrationSkipped", "WorkerService", $"User {oldUser.Id} già migrato", "Skipped");
                             await _channel.BasicAckAsync(ea.DeliveryTag, false);
                             return;
                         }
@@ -86,115 +80,31 @@ namespace Migration.Worker.services
                             MigrationDate = DateTime.UtcNow,
                             Status = "Success"
                         });
-
                         await db.SaveChangesAsync();
-
-                        await auditLog.LogAsync(userId: oldUser.Id.ToString(),
-                            action: "Forced Migration",
-                            details: $"Forced migration for {oldUser.Id}",
-                            status: "Success");
-
+                        await auditLog.LogAsync(oldUser.Id.ToString(), "ForcedMigration", "WorkerService", $"Migrazione forzata completata per {oldUser.Id}", "Success");
                         await _channel.BasicAckAsync(ea.DeliveryTag, false);
                         return;
                     }
 
-                    await using var tx = await db.Database.BeginTransactionAsync();
+                    var context = new MigrationContext(oldUser,scope);
 
-                    slot = await db.MigrationSlots
-                        .FromSqlRaw("SELECT TOP(1) * FROM MigrationSlots WITH (UPDLOCK, ROWLOCK, READPAST) WHERE Id = {0}", slotId)
-                        .FirstOrDefaultAsync();
+                    var saga = new MigrationSagaCoordinator();
 
-                    if (slot == null)
-                    {
-                        await auditLog.LogAsync(oldUser.Id.ToString(), "SlotUnavailable", "WorkerService",
-                            $"User={oldUser.Id}", "Failed");
+                    saga.AddStep(new ReserveSlotStep(slotId));
+                    saga.AddStep(new NormalizeUserStep());
+                    saga.AddStep(new PersistUserStep());
 
-                        await _channel.BasicNackAsync(ea.DeliveryTag, false, true);
-                        return;
-                    }
-
-                    slot.IsOccupied = true;
-                    slot.UserId = oldUser.Id.ToString();
-                    slot.StartedAt = DateTime.UtcNow;
-                    await db.SaveChangesAsync();
-
-                    await auditLog.LogAsync(userId: oldUser.Id.ToString(),
-                        action: "Slot Reservation",
-                        details: $"Slot {slot.Id} reserved for {oldUser.Id}",
-                        status: "InProgress");
-
-                    var alreadyMigratedNormal = await db.UserMigrations
-                        .AnyAsync(u => u.UserId == oldUser.Id.ToString() && u.IsMigrated);
-
-                    if (alreadyMigratedNormal)
-                    {
-                        await auditLog.LogAsync(userId: oldUser.Id.ToString(),
-                            action: "Validation",
-                            details: $"User {oldUser.Id} already migrated",
-                            status: "Failed",
-                            success: false);
-
-                        await tx.RollbackAsync();
-                        await _channel.BasicAckAsync(ea.DeliveryTag, false);
-                        return;
-                    }
-
-                    var newUser = UserMapper.Map(oldUser);
-
-                    db.UserMigrations.Add(new UserMigration
-                    {
-                        UserId = oldUser.Id.ToString(),
-                        IsMigrated = true,
-                        MigrationDate = DateTime.UtcNow,
-                        Status = "Success"
-                    });
-
-                    await db.SaveChangesAsync();
-                    await tx.CommitAsync();
-
-                    await auditLog.LogAsync(userId: oldUser.Id.ToString(),
-                        action: "Migration",
-                        details: $"Migration for {oldUser.Id} completed",
-                        status: "Success");
-
-                    await _channel.BasicAckAsync(ea.DeliveryTag, false);
-                }
-                catch (ArgumentException argEx)
-                {
-                    await auditLog.LogAsync(oldUser?.Id.ToString() ?? "Unknown",
-                        "WorkerService : Validation",
-                        $"Error={argEx.Message}",
-                        "Failed",
-                        success: false);
+                    await saga.ExecuteAsync(context);
 
                     await _channel.BasicAckAsync(ea.DeliveryTag, false);
                 }
                 catch (Exception ex)
                 {
-                    await auditLog.LogAsync(oldUser?.Id.ToString() ?? "Unknown",
-                        "WorkerService : Migration",
-                        $"Error={ex.Message}",
-                        "Failed",
-                        success: false);
-
+                    await auditLog.LogAsync(oldUser?.Id.ToString() ?? "Unknown", "WorkerService", $"Error={ex.Message}", "Failed", success: false);
                     await _channel.BasicNackAsync(ea.DeliveryTag, false, true);
                 }
-                finally
-                {
-                    if (!forced && slot != null)
-                    {
-                        slot.IsOccupied = false;
-                        slot.UserId = null;
-                        slot.StartedAt = null;
-                        slot.IsReserved = false;
-                        slot.ReservedUntil = null;
-                        await db.SaveChangesAsync();
-                    }
-                }
-            };
 
-            await _channel.BasicConsumeAsync(queue: _queueName, autoAck: false, consumer: consumer);
-            return Task.CompletedTask;
+            };
         }
     }
 }
